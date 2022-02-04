@@ -13,6 +13,7 @@ setuptools.setup(
         "bs4",
         "feedparser",
         "httpx",
-        "lxml"
+        "lxml",
+        "nest_asyncio"
     ]
 )
