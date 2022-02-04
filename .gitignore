@@ -241,4 +241,5 @@ Temporary Items
 .apdisk
 
 # dev
-.test*.py
+.test*
+legacy/*
