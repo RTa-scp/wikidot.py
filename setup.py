@@ -12,6 +12,7 @@ setuptools.setup(
     install_requires=[
         "bs4",
         "feedparser",
+        "requests",
         "httpx",
         "lxml",
         "nest_asyncio"
