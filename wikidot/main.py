@@ -260,18 +260,24 @@ class PrivateMessage:
         self.sendStatus: bool = sendStatus
 
     def send(self) -> PrivateMessage:
-        self.client.nonAsyncAjaxRequest(
-            body={
-                "source": self.body,
-                "subject": self.subject,
-                "to_user_id": self.recipient.id,
-                "action": "DashboardMessageAction",
-                "event": "send",
-                "moduleName": "Empty"
-            }
-        )
-        self.sendStatus = True
-        return self
+        try:
+            self.client.nonAsyncAjaxRequest(
+                body={
+                    "source": self.body,
+                    "subject": self.subject,
+                    "to_user_id": self.recipient.id,
+                    "action": "DashboardMessageAction",
+                    "event": "send",
+                    "moduleName": "Empty"
+                }
+            )
+            self.sendStatus = True
+            return self
+        except customexceptions.NotOK as e:
+            if e.status_code == "no_permission":
+                raise customexceptions.Forbidden("You can't send private messages to this recipient.")
+            else:
+                raise
 
     @staticmethod
     def createNewMessage(client: Client,

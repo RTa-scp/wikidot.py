@@ -14,5 +14,6 @@ license:
 import nest_asyncio
 
 from .main import Client, Site, User
+from .customexceptions import *
 
 nest_asyncio.apply()
