@@ -143,7 +143,7 @@ class Client:
             unescape=unescape
         )
 
-    def isSessionCreated(self) -> book:
+    def isSessionCreated(self) -> bool:
         return self.user is not None
 
     def getUser(self, name: str) -> User | None:
