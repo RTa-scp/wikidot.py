@@ -15,7 +15,7 @@ import nest_asyncio
 
 from . import logger
 from .customexceptions import *
-from .main import Util, Parser, Site, User, UserCollection, SiteMember, SiteMemberCollection, PrivateMessage
+from .main import Util, Parser, Client, Site, User, UserCollection, SiteMember, SiteMemberCollection, PrivateMessage
 
 logger = logger.logger
 

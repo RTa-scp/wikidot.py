@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name='wikidot',
-    version='2.0.1.4',
+    version='2.0.1.5',
     description='Wikidot Ajax/API Request Wrapper',
     author='ukwhatn',
     author_email='ukwhatn@gmail.com',
