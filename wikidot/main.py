@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime
 
 import bs4
@@ -45,8 +46,8 @@ class Parser:
         userUnixName = userName.lower().replace(" ", "-").replace("_", "-")
 
         # その他パラメータ取得
-        registration_date = None
-        pro_status = False
+        registrationDate = None
+        proStatus = False
         karma = None
         dlBox = pageContentElement.find("dl", class_="dl-horizontal")
         if dlBox is not None:
@@ -57,10 +58,10 @@ class Parser:
                 dd = dds[i].text
 
                 if "Wikidot user since" in dt:
-                    registration_date = Parser.odate(dds[i].find("span", class_="odate"))
+                    registrationDate = Parser.odate(dds[i].find("span", class_="odate"))
                 elif "Account type" in dt:
                     if "Pro" in dd:
-                        pro_status = True
+                        proStatus = True
                 elif "Karma" in dt:
                     if "guru" in dd:
                         karma = 5
@@ -76,7 +77,7 @@ class Parser:
                         karma = 0
 
         return User.createUserObjectManually(client=client, id=userId, name=userName, unixName=userUnixName,
-                                             registration_date=registration_date, pro_status=pro_status, karma=karma)
+                                             registrationDate=registrationDate, proStatus=proStatus, karma=karma)
 
     @staticmethod
     def printUser(client: Client, printUserElement: bs4Element.Tag | bs4Element.NavigableString) -> User:
@@ -92,17 +93,17 @@ class Parser:
         try:
             # Deleted Account
             if "class" in printUserElement.attrs and "deleted" in printUserElement["class"]:
-                return User.createUserObjectManually(client=client, id=int(printUserElement["data-id"]), is_deleted=True)
+                return User.createUserObjectManually(client=client, id=int(printUserElement["data-id"]), isDeleted=True)
 
             # Anonymous Account
             elif "class" in printUserElement.attrs and "anonymous" in printUserElement["class"]:
                 return User.createUserObjectManually(client=client,
                                                      ip=printUserElement.find("span", class_="ip").get_text().replace("(", "").replace(")", "").strip(),
-                                                     is_anonymous=True)
+                                                     isAnonymous=True)
 
             # Wikidot (for ppd)
             elif printUserElement.get_text() == "Wikidot":
-                return User.createUserObjectManually(client=client, is_wikidot=True)
+                return User.createUserObjectManually(client=client, isWikidot=True)
 
             # [[user xxx]]構文用(アイコンなし)
             elif len(printUserElement.find_all("a", recursive=False)) == 1:
@@ -121,7 +122,7 @@ class Parser:
             # Unknown user
             elif "attrs" in vars(printUserElement) and "class" in printUserElement.attrs and "error-inline" in \
                     printUserElement.attrs["class"]:
-                return User.createUserObjectManually(client=client, is_unknown=True)
+                return User.createUserObjectManually(client=client, isUnknown=True)
 
             # Normal Account
             else:
@@ -561,27 +562,27 @@ class User:
                  name: str = None,
                  unixName: str = None,
                  ip: str = None,
-                 registration_date: datetime = None,
-                 pro_status: bool = False,
+                 registrationDate: datetime = None,
+                 proStatus: bool = False,
                  karma: int = None,
-                 is_wikidot: bool = False,
-                 is_anonymous: bool = False,
-                 is_deleted: bool = False,
-                 is_unknown: bool = False
+                 isWikidot: bool = False,
+                 isAnonymous: bool = False,
+                 isDeleted: bool = False,
+                 isUnknown: bool = False
                  ):
 
         # Check
 
-        if is_wikidot:
+        if isWikidot:
             if name != "Wikidot" and unixName != "wikidot":
                 raise ValueError("Incorrect instance creation may have occurred.")
-        elif is_anonymous:
+        elif isAnonymous:
             if ip is None:
                 raise ValueError("Give an IP address of the anonymous user.")
-        elif is_deleted:
+        elif isDeleted:
             if name != "account deleted" and unixName != "account-deleted":
                 raise ValueError("Incorrect instance creation may have occurred.")
-        elif is_unknown:
+        elif isUnknown:
             if name != "unknown user" and unixName != "unknown-user":
                 raise ValueError("Incorrect instance creation may have occurred.")
 
@@ -590,26 +591,26 @@ class User:
         self.name = name
         self.unixName = unixName
         self.ip = ip
-        self.registration_date = registration_date
-        self.pro_status = pro_status
+        self.registrationDate = registrationDate
+        self.proStatus = proStatus
         self.karma = karma
-        self.is_wikidot = is_wikidot
-        self.is_anonymous = is_anonymous
-        self.is_deleted = is_deleted
-        self.is_unknown = is_unknown
+        self.isWikidot = isWikidot
+        self.isAnonymous = isAnonymous
+        self.isDeleted = isDeleted
+        self.isUnknown = isUnknown
 
     # ============
     # 組み込み関数
     # ============
 
     def __str__(self):
-        if self.is_wikidot:
+        if self.isWikidot:
             return f"<User: WikidotSystem>"
-        elif self.is_anonymous:
+        elif self.isAnonymous:
             return f"<User: Anonumous({self.ip})>"
-        elif self.is_deleted:
+        elif self.isDeleted:
             return f"<User: DeletedUser({self.id})>"
-        elif self.is_unknown:
+        elif self.isUnknown:
             return f"<User: UnknownUser>"
         else:
             return f"<User: {self.name}({self.id})>"
@@ -632,24 +633,24 @@ class User:
                                  name: str = None,
                                  unixName: str = None,
                                  ip: str = None,
-                                 registration_date: datetime = None,
-                                 pro_status: bool = False,
+                                 registrationDate: datetime = None,
+                                 proStatus: bool = False,
                                  karma: int = None,
-                                 is_wikidot: bool = False,
-                                 is_anonymous: bool = False,
-                                 is_deleted: bool = False,
-                                 is_unknown: bool = False) -> User:
-        if is_wikidot:
-            return User(client=client, name="Wikidot", unixName="wikidot", is_wikidot=True)
-        elif is_anonymous:
-            return User(client=client, ip=ip, is_anonymous=True)
-        elif is_deleted:
-            return User(client=client, name="account deleted", unixName="account-deleted", is_deleted=True)
-        elif is_unknown:
-            return User(client=client, name="unknown user", unixName="unknown-user", is_unknown=True)
+                                 isWikidot: bool = False,
+                                 isAnonymous: bool = False,
+                                 isDeleted: bool = False,
+                                 isUnknown: bool = False) -> User:
+        if isWikidot:
+            return User(client=client, name="Wikidot", unixName="wikidot", isWikidot=True)
+        elif isAnonymous:
+            return User(client=client, ip=ip, isAnonymous=True)
+        elif isDeleted:
+            return User(client=client, name="account deleted", unixName="account-deleted", isDeleted=True)
+        elif isUnknown:
+            return User(client=client, name="unknown user", unixName="unknown-user", isUnknown=True)
         else:
-            return User(client=client, id=id, name=name, unixName=unixName, registration_date=registration_date,
-                        pro_status=pro_status, karma=karma)
+            return User(client=client, id=id, name=name, unixName=unixName, registrationDate=registrationDate,
+                        proStatus=proStatus, karma=karma)
 
     # ========
     # 自己変換
@@ -711,6 +712,8 @@ class UserCollection(list):
         while len(names) > 0:
             sources.extend(loop.run_until_complete(_main(names[:client.asyncLoopLength], asyncLimit)))
             del names[:client.asyncLoopLength]
+            time.sleep(client.asyncLoopWaitTime)
+            logger.info(f"GetUsers: completed: {len(sources)}, pending: {len(names)}")
 
         objects = []
         for name, src in sources:
@@ -866,6 +869,7 @@ class SiteMemberCollection(list):
                 _results.extend(await asyncio.gather(*_stmt[:site.client.asyncLoopLength]))
                 del _stmt[:site.client.asyncLoopLength]
                 await asyncio.sleep(site.client.asyncLoopWaitTime)
+                logger.info(f"GetSiteMembers: completed: {len(_stmt)}, pending: {len(_results)}")
 
             return _results
 
