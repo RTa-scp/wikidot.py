@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 class WikidotError(Exception):
-    """A base exception of all custom exceptions in wikidot.py
+    """A base exception to all custom exceptions in wikidot.py
 
     Parameters
     ----------
@@ -14,6 +14,19 @@ class WikidotError(Exception):
     """
 
     def __init__(self, message: str):
+        super().__init__(message)
+
+
+class SessionRequiredError(WikidotError):
+    """Exception indicating that session is required to use the method you try to use.
+
+    Parameters
+    ----------
+    message
+        Error message
+    """
+
+    def __init__(self, message: str = "You must login to use this method."):
         super().__init__(message)
 
 
@@ -70,6 +83,76 @@ class AMCRequestError(RequestError):
     def __init__(self, message: str, *, status_code: int):
         super().__init__(message)
         self.status_code = status_code
+
+
+class APIError(RequestError):
+    """Base exception for errors related to WikidotAPI.
+
+    Parameters
+    ----------
+    message
+        Error message
+
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class APIUnauthorizedError(APIError):
+    """Exception raised when Authorized WikidotAPI session is not found, or failed to create session.
+
+    Parameters
+    ----------
+    message
+        Error message
+
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class APITargetError(APIError):
+    """Exception raised when target site/page is not found.
+
+    Parameters
+    ----------
+    message
+        Error message
+
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class APIDisabledError(APIError):
+    """Exception raised when the site you try to request is disabled API access.
+
+    Parameters
+    ----------
+    message
+        Error message
+
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class ProcessingError(APIError):
+    """Exception raised when error occurred while processing a request.
+
+    Parameters
+    ----------
+    message
+        Error message
+
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 class Forbidden(RequestError):
@@ -178,76 +261,6 @@ class NoRequiredDataError(WikidotError):
 
 class PageExistsError(WikidotError):
     """Exception raised when the page you try to create is already exists.
-
-    Parameters
-    ----------
-    message
-        Error message
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class APIError(RequestError):
-    """Base exception for errors related to WikidotAPI.
-
-    Parameters
-    ----------
-    message
-        Error message
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class APIUnauthorizedError(APIError):
-    """Exception raised when Authorized WikidotAPI session is not found, or failed to create session.
-
-    Parameters
-    ----------
-    message
-        Error message
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class APITargetError(APIError):
-    """Exception raised when target site/page is not found.
-
-    Parameters
-    ----------
-    message
-        Error message
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class APIDisabledError(APIError):
-    """Exception raised when the site you try to request is disabled API access.
-
-    Parameters
-    ----------
-    message
-        Error message
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class ProcessingError(APIError):
-    """Exception raised when error occurred while processing a request.
 
     Parameters
     ----------

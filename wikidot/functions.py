@@ -6,7 +6,11 @@ import time
 
 import httpx
 
+from . import logger
 from .customexceptions import AMCRequestError, NotOK, RequestError, ReturnedDataError, TemporaryErrorForHandle
+
+logger = logger.logger
+
 
 # TODO: 変数が汚い
 # TODO: エラーハンドリングがカオス
@@ -15,23 +19,27 @@ from .customexceptions import AMCRequestError, NotOK, RequestError, ReturnedData
 async def asyncAjaxRequest(*,
                            site,
                            body: dict,
-                           attempt_limit: int = 6,
-                           wait_time: float = 10,
-                           timeout: float = 40,
-                           unescape: bool = True,
+                           attempt_limit: int,
+                           wait_time: float,
+                           timeout: float,
+                           unescape: bool,
                            ) -> dict:
     # リクエスト用関数
     async def _request(__site_name: str, __ssl: bool, __data: dict, __headers: dict, __timeout: float) -> dict:
         async with httpx.AsyncClient() as __client:
             try:
+                logger.debug(f"POST Ajax Request:\n"
+                             f"\tURI: {'https://' if __ssl else 'http://'}{__site_name}.wikidot.com/ajax-module-connector.php\n"
+                             f"\tHeaders: {__headers}\n"
+                             f"\tData: {__data}")
                 __r = await __client.post(
                     f"{'https://' if __ssl else 'http://'}{__site_name}.wikidot.com/ajax-module-connector.php",
                     data=__data,
                     headers=__headers,
                     timeout=__timeout
                 )
-            except httpx.HTTPStatusError as e:
-                raise AMCRequestError("Response Status is 4xx or 5xx.", status_code=e.response.status_code)
+            except httpx.HTTPStatusError as _e:
+                raise AMCRequestError("Response Status is 4xx or 5xx.", status_code=_e.response.status_code)
             except Exception:
                 raise  # 拾った例外をそのままraise
         # HTTPステータスコードを確認 200以外ならRequestFailedError(スタックトレース用/arg2: <status_code>)をraise
@@ -79,9 +87,10 @@ async def asyncAjaxRequest(*,
         except ReturnedDataError:
             raise
 
-        except Exception:
+        except Exception as e:
             # 再試行
             if _cnt < attempt_limit:
+                logger.warning(f"Retry AjaxRequest: {type(e)}({e.args})")
                 _cnt += 1
                 await asyncio.sleep(wait_time)
                 pass
@@ -106,14 +115,18 @@ async def asyncAjaxRequest(*,
 def nonAsyncAjaxRequest(*,
                         site,
                         body: dict,
-                        attempt_limit: int = 6,
-                        wait_time: float = 10,
-                        timeout: float = 40,
-                        unescape: bool = True,
+                        attempt_limit: int,
+                        wait_time: float,
+                        timeout: float,
+                        unescape: bool,
                         ) -> dict:
     # リクエスト用関数
     def _request(__site_name: str, __ssl: bool, __data: dict, __headers: dict, __timeout: float) -> dict:
         try:
+            logger.debug(f"POST Ajax Request:\n"
+                         f"\tURI: {'https://' if __ssl else 'http://'}{__site_name}.wikidot.com/ajax-module-connector.php\n"
+                         f"\tHeaders: {__headers}\n"
+                         f"\tData: {__data}")
             __r = httpx.post(
                 f"{'https://' if __ssl else 'http://'}{__site_name}.wikidot.com/ajax-module-connector.php",
                 data=__data,
@@ -169,9 +182,10 @@ def nonAsyncAjaxRequest(*,
         except ReturnedDataError:
             raise
 
-        except Exception:
+        except Exception as e:
             # 再試行
             if _cnt < attempt_limit:
+                logger.warning(f"Retry AjaxRequest: {type(e)}({e.args})")
                 _cnt += 1
                 time.sleep(wait_time)
                 pass
@@ -191,5 +205,3 @@ def nonAsyncAjaxRequest(*,
         _json["body"] = html.unescape(_json["body"])
     # 処理終了
     return _json
-
-

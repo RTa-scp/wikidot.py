@@ -13,7 +13,10 @@ license:
 
 import nest_asyncio
 
-from .main import Client, Site, User
+from . import logger
 from .customexceptions import *
+from .main import Client, Site, User, SiteMember
+
+logger = logger.logger
 
 nest_asyncio.apply()
