@@ -708,12 +708,14 @@ class UserCollection(list):
             asyncLimit = client.asyncLimit
 
         loop = asyncio.get_event_loop()
+        _loopStartTime = datetime.now()
         sources = []
         while len(names) > 0:
             sources.extend(loop.run_until_complete(_main(names[:client.asyncLoopLength], asyncLimit)))
             del names[:client.asyncLoopLength]
             time.sleep(client.asyncLoopWaitTime)
-            logger.info(f"GetUsers: completed: {len(sources)}, pending: {len(names)}")
+            logger.info(f"GetUsers: completed: {len(sources)}, pending: {len(names)}\n"
+                        f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining {((datetime.now() - _loopStartTime) / len(sources)) * len(names)}")
 
         objects = []
         for name, src in sources:
@@ -864,12 +866,15 @@ class SiteMemberCollection(list):
 
             _results = []
 
+            _loopStartTime = datetime.now()
+
             while len(_stmt) > 0:
                 # print("====loop====")
                 _results.extend(await asyncio.gather(*_stmt[:site.client.asyncLoopLength]))
                 del _stmt[:site.client.asyncLoopLength]
                 await asyncio.sleep(site.client.asyncLoopWaitTime)
-                logger.info(f"GetSiteMembers: completed: {len(_stmt)}, pending: {len(_results)}")
+                logger.info(f"GetSiteMembers: completed: {len(_results)}, pending: {len(_stmt)}\n"
+                            f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining {((datetime.now() - _loopStartTime) / len(_results)) * len(_stmt)}")
 
             return _results
 
