@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from copy import deepcopy
 from datetime import datetime
 
 import bs4
@@ -628,7 +629,7 @@ class User:
     @staticmethod
     def createUserObjectByName(client: Client, name: str) -> User | None:
         # nameをunix系に整形
-        name = Util.strToUnix(name)
+        name = Util.strToUnix(name).replace(" ", "-").replace("_", "-").strip()
         # user:infoをgetしてbs4でパース
         src = httpx.get("https://www.wikidot.com/user:info/" + name).text
         return Parser.userInfoPage(client, src)
@@ -702,7 +703,7 @@ class UserCollection(list):
         async def _main(_names, _limit):
             async def __executor(__name, __limit):
                 async with asyncio.Semaphore(__limit):
-                    __src = await _getSource(Util.strToUnix(__name))
+                    __src = await _getSource(Util.strToUnix(__name).replace(" ", "-").replace("_", "-").strip())
                     __src = __src.text
                     return __name, __src
 
@@ -716,6 +717,7 @@ class UserCollection(list):
         loop = asyncio.get_event_loop()
         _loopStartTime = datetime.now()
         sources = []
+        names = deepcopy(names)
         while len(names) > 0:
             sources.extend(loop.run_until_complete(_main(names[:client.asyncLoopLength], asyncLimit)))
             del names[:client.asyncLoopLength]
