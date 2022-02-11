@@ -14,6 +14,12 @@ from . import customexceptions, datatypes, functions, logger
 logger = logger.logger
 
 
+class Util:
+    @staticmethod
+    def strToUnix(string: str) -> str:
+        return functions.strToUnix(string)
+
+
 class Parser:
     @staticmethod
     def userInfoPage(client: Client, src: str) -> User | None:
@@ -43,7 +49,7 @@ class Parser:
 
         # ユーザ名取得
         userName = pageContentElement.find(class_="profile-title").get_text().strip()
-        userUnixName = userName.lower().replace(" ", "-").strip()
+        userUnixName = Util.strToUnix(userName)
 
         # その他パラメータ取得
         registrationDate = None
@@ -109,7 +115,7 @@ class Parser:
             elif len(printUserElement.find_all("a", recursive=False)) == 1:
                 _a_elem = printUserElement.find_all("a", recursive=False)[0]
                 author_name = printUserElement.get_text()
-                author_unix = author_name.replace("-", "_").replace(" ", "_").lower()
+                author_unix = Util.strToUnix(author_name)
                 author_id = None
                 if "onclick" in _a_elem.attrs and "WIKIDOT.page.listeners.userInfo" in _a_elem["onclick"]:
                     author_id = int(
@@ -622,7 +628,7 @@ class User:
     @staticmethod
     def createUserObjectByName(client: Client, name: str) -> User | None:
         # nameをunix系に整形
-        name = name.lower().replace(" ", "-").strip()
+        name = Util.strToUnix(name)
         # user:infoをgetしてbs4でパース
         src = httpx.get("https://www.wikidot.com/user:info/" + name).text
         return Parser.userInfoPage(client, src)
@@ -696,7 +702,7 @@ class UserCollection(list):
         async def _main(_names, _limit):
             async def __executor(__name, __limit):
                 async with asyncio.Semaphore(__limit):
-                    __src = await _getSource(__name.lower().replace(" ", "-").strip())
+                    __src = await _getSource(Util.strToUnix(__name))
                     __src = __src.text
                     return __name, __src
 
