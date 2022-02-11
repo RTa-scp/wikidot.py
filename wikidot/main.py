@@ -874,7 +874,7 @@ class SiteMemberCollection(list):
                 del _stmt[:site.client.asyncLoopLength]
                 await asyncio.sleep(site.client.asyncLoopWaitTime)
                 logger.info(f"GetSiteMembers: completed: {len(_results)}, pending: {len(_stmt)}\n"
-                            f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining {((datetime.now() - _loopStartTime) / len(_results)) * len(_stmt)}")
+                            f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining: {((datetime.now() - _loopStartTime) / len(_results)) * len(_stmt)}")
 
             return _results
 
