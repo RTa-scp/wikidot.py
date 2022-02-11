@@ -694,8 +694,8 @@ class UserCollection(list):
                             "https://www.wikidot.com/user:info/" + _name,
                             timeout=60
                         )
-                except httpx.ConnectError:
-                    # print("go continue")
+                except (httpx.HTTPError, httpx.InvalidURL, httpx.CookieConflict, httpx.StreamError) as e:
+                    logger.warning(f"Retry UserInfoRequest: {type(e)}({e.args})")
                     await asyncio.sleep(client.amcWaitTime)
                     continue
 
