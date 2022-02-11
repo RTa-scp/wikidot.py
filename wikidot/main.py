@@ -43,7 +43,7 @@ class Parser:
 
         # ユーザ名取得
         userName = pageContentElement.find(class_="profile-title").get_text().strip()
-        userUnixName = userName.lower().replace(" ", "-").replace("_", "-")
+        userUnixName = userName.lower().replace(" ", "-").strip()
 
         # その他パラメータ取得
         registrationDate = None
@@ -622,7 +622,7 @@ class User:
     @staticmethod
     def createUserObjectByName(client: Client, name: str) -> User | None:
         # nameをunix系に整形
-        name = name.lower().replace(" ", "-").replace("_", "-")
+        name = name.lower().replace(" ", "-").strip()
         # user:infoをgetしてbs4でパース
         src = httpx.get("https://www.wikidot.com/user:info/" + name).text
         return Parser.userInfoPage(client, src)
@@ -696,7 +696,7 @@ class UserCollection(list):
         async def _main(_names, _limit):
             async def __executor(__name, __limit):
                 async with asyncio.Semaphore(__limit):
-                    __src = await _getSource(__name.lower().replace(" ", "-").replace("_", "-"))
+                    __src = await _getSource(__name.lower().replace(" ", "-").strip())
                     __src = __src.text
                     return __name, __src
 
