@@ -190,7 +190,7 @@ class Client:
         # api : bool, default=False
         #     APIキーの取得を行うか。デフォルトではFalse。
         """
-        
+
         self.asyncLimit = asyncLimit
         self.asyncLoopLength = asyncLoopLength
         self.asyncLoopWaitTime = asyncLoopWaitTime
@@ -822,7 +822,10 @@ class SiteMemberCollection(list):
             # pager
             _pager = _bodyElement.find("div", class_="pager")
             if _pager is not None:
-                _total = int(_pager.find_all("span", class_="target")[-2].string)
+                try:
+                    _total = int(_pager.find_all("span", class_="target")[-2].string)
+                except ValueError:
+                    _total = None
             else:
                 _total = 1
 
