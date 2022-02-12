@@ -415,11 +415,13 @@ class Client:
 
     # UserCollectionオブジェクト作成
 
-    def getUsers(self, nameList: list[str] | tuple[str], convertUnix: bool = True, asyncLimit: int | None = None) -> UserCollection:
+    def getUsers(self, nameList: list[str] | tuple[str], details: bool = True, convertUnix: bool = True, asyncLimit: int | None = None) -> UserCollection:
         """ユーザ名からUserCollectionオブジェクトを作成して返す。見つからないユーザはスキップされる。
 
         Parameters
         ----------
+        details: bool
+            Wikidot登録日やカルマなどを取得するかどうか　Falseならid, name, unixNameのみとなる
         convertUnix : bool
             namesListにunix変換が必要かどうか
         nameList : list[str] | tuple[str]
@@ -427,9 +429,12 @@ class Client:
         asyncLimit : int | None
             並列リクエスト数
         """
-        return UserCollection.createUserCollectionByNameList(self, nameList, convertUnix, asyncLimit)
+        if details:
+            return UserCollection.createUserCollectionByNameList(self, nameList, convertUnix, asyncLimit)
+        else:
+            return UserCollection.createLimitedUserCollectionByNameList(self, nameList, asyncLimit)
 
-    # PrivateMessageオブジェクト作成
+            # PrivateMessageオブジェクト作成
 
     def createNewMessage(self,
                          recipient: User,
@@ -453,6 +458,55 @@ class Client:
                                                recipient=recipient,
                                                subject=subject,
                                                body=body)
+
+    # ==============
+    # クラスメソッド
+    # ==============
+
+    async def convertSourceToHTML(self, src):
+        res = await self.asyncAjaxRequest(
+            body={
+                "moduleName": "edit/PagePreviewModule",
+                "mode": "page",
+                "source": src
+            },
+            unescape=False
+        )
+
+        # 返り値判定
+        if "body" not in res:
+            raise customexceptions.ReturnedDataError("Returned data isn't contained body element.")
+
+        return src, res["body"].removeprefix("\n\n").removesuffix("\n")
+
+    def loopConvertSourceToHTML(self, srcList: list[str] | tuple[str], asyncLimit: int = None):
+        async def _main(_srcList: list[str] | tuple[str], _asyncLimit: int):
+            async def __executor(__src: str, __asyncLimit: int):
+                async with asyncio.Semaphore(__asyncLimit):
+                    __resSrc = await self.convertSourceToHTML(__src)
+                    return __resSrc
+
+            _stmt = [__executor(_src, _asyncLimit) for _src in _srcList]
+
+            _results = []
+
+            _loopStartTime = datetime.now()
+
+            while len(_stmt) > 0:
+                _results.extend(await asyncio.gather(*_stmt[:self.asyncLoopLength]))
+                del _stmt[:self.asyncLoopLength]
+                await asyncio.sleep(self.asyncLoopWaitTime)
+                logger.info(f"loopConvertSourceToHTML: completed: {len(_results)}, pending: {len(_stmt)}\n"
+                            f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining: {((datetime.now() - _loopStartTime) / len(_results)) * len(_stmt)}")
+
+            return _results
+
+        if asyncLimit is None:
+            asyncLimit = self.asyncLimit
+
+        loop = asyncio.get_event_loop()
+        results = loop.run_until_complete(_main(srcList, asyncLimit))
+        return results
 
 
 class Site:
@@ -741,7 +795,7 @@ class UserCollection(list):
             del names[:client.asyncLoopLength]
             time.sleep(client.asyncLoopWaitTime)
             logger.info(f"GetUsers: completed: {len(sources)}, pending: {len(names)}\n"
-                        f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining {((datetime.now() - _loopStartTime) / len(sources)) * len(names)}")
+                        f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining: {((datetime.now() - _loopStartTime) / len(sources)) * len(names)}")
 
         objects = []
         for name, src in sources:
@@ -754,6 +808,28 @@ class UserCollection(list):
                 objects.append(obj)
 
         return UserCollection(client=client, objects=objects)
+
+    @staticmethod
+    def createLimitedUserCollectionByNameList(client: Client, names: list[str] | tuple[str],
+                                              asyncLimit: int | None = None) -> UserCollection:
+        names = deepcopy(names)
+
+        src = []
+
+        while len(names) > 0:
+            src.append("".join([f"[[user {name}]]" for name in names[:500]]))
+            del names[:500]
+
+        resultSrcs = client.loopConvertSourceToHTML(src, asyncLimit)
+
+        resultUsers = []
+
+        for _null, htmlSrc in resultSrcs:
+            printUsers = bs4.BeautifulSoup(htmlSrc, "lxml").find_all("span", class_="printuser")
+            for printUser in printUsers:
+                resultUsers.append(Parser.printUser(client, printUser))
+
+        return UserCollection(client=client, objects=resultUsers)
 
     # ========
     # 自己変換
