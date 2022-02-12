@@ -23,11 +23,13 @@ class Util:
 
 class Parser:
     @staticmethod
-    def userInfoPage(client: Client, src: str) -> User | None:
+    def userInfoPage(client: Client, src: str, unixName: str = None) -> User | None:
         """wikidot.com/user:info/~ のソースコード(str)からUserまたはNoneを返す
 
         Parameters
         ----------
+        unixName: str
+            対象ユーザのunixNameがわかっていれば記載
         client: Client
             使用中のクライアント
         src: str
@@ -50,7 +52,11 @@ class Parser:
 
         # ユーザ名取得
         userName = pageContentElement.find(class_="profile-title").get_text().strip()
-        userUnixName = Util.strToUnix(userName)
+        # unixName引数が与えられていればそれを用いる
+        if unixName is None:
+            userUnixName = Util.strToUnix(userName)
+        else:
+            userUnixName = unixName
 
         # その他パラメータ取得
         registrationDate = None
@@ -115,14 +121,12 @@ class Parser:
             # [[user xxx]]構文用(アイコンなし)
             elif len(printUserElement.find_all("a", recursive=False)) == 1:
                 _a_elem = printUserElement.find_all("a", recursive=False)[0]
-                author_name = printUserElement.get_text()
-                author_unix = Util.strToUnix(author_name)
+                author_name = _a_elem.get_text()
+                author_unix = str(_a_elem["href"]).replace("http://www.wikidot.com/user:info/", "")
                 author_id = None
                 if "onclick" in _a_elem.attrs and "WIKIDOT.page.listeners.userInfo" in _a_elem["onclick"]:
                     author_id = int(
-                        str(_a_elem["onclick"]).replace("WIKIDOT.page.listeners.userInfo(", "").replace(
-                            "); return false;",
-                            "")
+                        str(_a_elem["onclick"]).replace("WIKIDOT.page.listeners.userInfo(", "").replace("); return false;", "")
                     )
                 return User.createUserObjectManually(client=client, name=author_name, unixName=author_unix, id=author_id)
 
@@ -137,8 +141,7 @@ class Parser:
                 author_name = _author.get_text()
                 author_unix = str(_author["href"]).replace("http://www.wikidot.com/user:info/", "")
                 author_id = int(
-                    str(_author["onclick"]).replace("WIKIDOT.page.listeners.userInfo(", "").replace("); return false;",
-                                                                                                    "")
+                    str(_author["onclick"]).replace("WIKIDOT.page.listeners.userInfo(", "").replace("); return false;", "")
                 )
                 return User.createUserObjectManually(client=client, name=author_name, unixName=author_unix, id=author_id)
 
@@ -211,7 +214,7 @@ class Client:
         if user is None:
             self.user = None
         else:
-            self.user = User.createUserObjectByName(self, user)
+            self.user = User.createUserObjectByName(self, name=user)
         # リクエストヘッダオブジェクト
         self.requestHeader: datatypes.AMCRequestHeader = datatypes.AMCRequestHeader()
         # WikidotAPIキー
@@ -398,29 +401,33 @@ class Client:
 
     # Userオブジェクト作成
 
-    def getUser(self, name: str) -> User | None:
+    def getUser(self, name: str = None, unixName: str = None) -> User | None:
         """ユーザ名からUserオブジェクトを作成して返す。ユーザが見つからなければNoneを返す。
 
         Parameters
         ----------
+        unixName : str
+            検索対象のunixユーザ名 わかっている場合はこちらを用いる
         name : str
             検索対象のユーザ名
         """
-        return User.createUserObjectByName(self, name)
+        return User.createUserObjectByName(self, name, unixName)
 
     # UserCollectionオブジェクト作成
 
-    def getUsers(self, nameList: list[str] | tuple[str], asyncLimit: int | None = None) -> UserCollection:
+    def getUsers(self, nameList: list[str] | tuple[str], convertUnix: bool = True, asyncLimit: int | None = None) -> UserCollection:
         """ユーザ名からUserCollectionオブジェクトを作成して返す。見つからないユーザはスキップされる。
 
         Parameters
         ----------
+        convertUnix : bool
+            namesListにunix変換が必要かどうか
         nameList : list[str] | tuple[str]
             検索対象のユーザ名のリスト
         asyncLimit : int | None
             並列リクエスト数
         """
-        return UserCollection.createUserCollectionByNameList(self, nameList, asyncLimit)
+        return UserCollection.createUserCollectionByNameList(self, nameList, convertUnix, asyncLimit)
 
     # PrivateMessageオブジェクト作成
 
@@ -627,12 +634,19 @@ class User:
     # ========
 
     @staticmethod
-    def createUserObjectByName(client: Client, name: str) -> User | None:
-        # nameをunix系に整形
-        name = Util.strToUnix(name).replace(" ", "-").replace("_", "-").strip()
+    def createUserObjectByName(client: Client, name: str = None, unixName: str = None) -> User | None:
+        # 引数判定
+        if name is None and unixName is None:
+            raise ValueError("Either name or unixName must be given.")
+        # unixNameが与えられなければ、nameをunix系に整形
+        # TODO: ごく一部のユーザについて、unix化の処理が違う可能性がある
+        if unixName is None:
+            argUnixName = Util.strToUnix(name).replace(" ", "-").replace("_", "-").strip()
+        else:
+            argUnixName = unixName
         # user:infoをgetしてbs4でパース
-        src = httpx.get("https://www.wikidot.com/user:info/" + name).text
-        return Parser.userInfoPage(client, src)
+        src = httpx.get("https://www.wikidot.com/user:info/" + argUnixName).text
+        return Parser.userInfoPage(client, src, unixName)
 
     @staticmethod
     def createUserObjectManually(client: Client,
@@ -685,7 +699,7 @@ class UserCollection(list):
     # ========
 
     @staticmethod
-    def createUserCollectionByNameList(client: Client, names: list[str] | tuple[str],
+    def createUserCollectionByNameList(client: Client, names: list[str] | tuple[str], convertUnix: bool = True,
                                        asyncLimit: int | None = None) -> UserCollection:
         async def _getSource(_name: str):
             while True:
@@ -700,14 +714,18 @@ class UserCollection(list):
                     await asyncio.sleep(client.amcWaitTime)
                     continue
 
-        async def _main(_names, _limit):
-            async def __executor(__name, __limit):
+        async def _main(_names: list[str] | tuple[str], _limit: int, _convertUnix: bool):
+            async def __executor(__name: [str] | tuple[str], __limit: int, __convertUnix: bool):
                 async with asyncio.Semaphore(__limit):
-                    __src = await _getSource(Util.strToUnix(__name).replace(" ", "-").replace("_", "-").strip())
+                    if __convertUnix:
+                        __unix = Util.strToUnix(__name).replace(" ", "-").replace("_", "-").strip()
+                    else:
+                        __unix = __name
+                    __src = await _getSource(__unix)
                     __src = __src.text
                     return __name, __src
 
-            stmt = [__executor(t, _limit) for t in _names]
+            stmt = [__executor(t, _limit, _convertUnix) for t in _names]
 
             return await asyncio.gather(*stmt)
 
@@ -719,7 +737,7 @@ class UserCollection(list):
         sources = []
         names = deepcopy(names)
         while len(names) > 0:
-            sources.extend(loop.run_until_complete(_main(names[:client.asyncLoopLength], asyncLimit)))
+            sources.extend(loop.run_until_complete(_main(names[:client.asyncLoopLength], asyncLimit, convertUnix)))
             del names[:client.asyncLoopLength]
             time.sleep(client.asyncLoopWaitTime)
             logger.info(f"GetUsers: completed: {len(sources)}, pending: {len(names)}\n"
@@ -727,7 +745,11 @@ class UserCollection(list):
 
         objects = []
         for name, src in sources:
-            obj = Parser.userInfoPage(client, src)
+            if convertUnix:
+                argName = None
+            else:
+                argName = name
+            obj = Parser.userInfoPage(client, src, argName)
             if obj is not None:
                 objects.append(obj)
 
@@ -759,8 +781,8 @@ class SiteMember(User):
     # ========
 
     @staticmethod
-    def createSiteMemberObjectByName(site: Site, name: str) -> SiteMember | None:
-        user = User.createUserObjectByName(client=site.client, name=name)
+    def createSiteMemberObjectByName(site: Site, name: str = None, unixName: str = None) -> SiteMember | None:
+        user = User.createUserObjectByName(client=site.client, name=name, unixName=unixName)
         if user is None:
             return None
         else:
