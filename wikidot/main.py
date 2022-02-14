@@ -619,8 +619,21 @@ class Site:
     # ==============
     # クラスメソッド
     # ==============
-    def getMembers(self, asyncLimit: int = None) -> SiteMemberCollection:
-        return SiteMemberCollection.createSiteMemberCorrectionFromSiteObject(site=self, asyncLimit=asyncLimit)
+    def getMembers(self, group: str = None, asyncLimit: int = None) -> SiteMemberCollection:
+        if group is not None:
+            return SiteMemberCollection.createSiteMemberCorrectionFromSiteObject(site=self, group=group, asyncLimit=asyncLimit)
+        else:
+            members = SiteMemberCollection.createSiteMemberCorrectionFromSiteObject(site=self, group=None, asyncLimit=asyncLimit)
+            mods = SiteMemberCollection.createSiteMemberCorrectionFromSiteObject(site=self, group="moderators", asyncLimit=asyncLimit)
+            mods = [mod.id for mod in mods]
+            admins = SiteMemberCollection.createSiteMemberCorrectionFromSiteObject(site=self, group="admins", asyncLimit=asyncLimit)
+            admins = [admin.id for admin in admins]
+            for member in members:
+                if member.id in mods:
+                    member.isModerator = True
+                if member.id in admins:
+                    member.isAdmin = True
+            return members
 
 
 class User:
@@ -840,10 +853,12 @@ class UserCollection(list):
 
 
 class SiteMember(User):
-    def __init__(self, site: Site, id: int, name: str, unixName: str, joinDate: datetime = None):
+    def __init__(self, site: Site, id: int, name: str, unixName: str, joinDate: datetime = None, isAdmin: bool = False, isModerator: bool = False):
         super().__init__(site.client, id, name, unixName)
         self.site = site
         self.joinDate = joinDate
+        self.isAdmin = isAdmin
+        self.isModerator = isModerator
 
     # ============
     # 組み込み関数
@@ -905,15 +920,15 @@ class SiteMemberCollection(list):
     # クラスメソッド
     # ==============
     @staticmethod
-    def createSiteMemberCorrectionFromSiteObject(site: Site, asyncLimit: int = None) -> SiteMemberCollection:
-        async def _getData(_site: Site, _page: int):
+    def createSiteMemberCorrectionFromSiteObject(site: Site, group: str = None, asyncLimit: int = None) -> SiteMemberCollection:
+        async def _getData(_site: Site, _group: str, _page: int):
             while True:
                 try:
                     _r = await _site.asyncAjaxRequest(
                         body={
                             "moduleName": "membership/MembersListModule",
                             "page": _page,
-                            "group": "",
+                            "group": _group,
                             "order": "",
                         }
                     )
@@ -949,7 +964,9 @@ class SiteMemberCollection(list):
             else:
                 for _member in _members:
                     _user = Parser.printUser(_site.client, _member.find("span", class_="printuser"))
-                    _joinDate = Parser.odate(_member.find("span", class_="odate"))
+                    _joinDate = _member.find("span", class_="odate")
+                    if _joinDate is not None:
+                        _joinDate = Parser.odate(_member.find("span", class_="odate"))
                     _siteMember = _user.convertToSiteMember(site=_site, joinDate=_joinDate)
                     _r.append(_siteMember)
 
@@ -957,18 +974,18 @@ class SiteMemberCollection(list):
 
             return _total, _r
 
-        async def _main(_site: Site, _asyncLimit: int):
-            async def __executor(__site: Site, __page: int, __asyncLimit: int, __first: bool):
+        async def _main(_site: Site, _group: str, _asyncLimit: int):
+            async def __executor(__site: Site, __group: str, __page: int, __asyncLimit: int, __first: bool):
                 async with asyncio.Semaphore(__asyncLimit):
-                    __src = await _getData(__site, __page)
+                    __src = await _getData(__site, __group, __page)
                     if __first:
                         return _parseBody(__site, __src)
                     else:
                         return _parseBody(__site, __src)[1]
 
-            _total, _users = await __executor(_site, 1, _asyncLimit, True)
+            _total, _users = await __executor(_site, group, 1, _asyncLimit, True)
 
-            _stmt = [__executor(_site, _pageNum + 1, _asyncLimit, False) for _pageNum in range(_total)]
+            _stmt = [__executor(_site, group, _pageNum + 1, _asyncLimit, False) for _pageNum in range(_total)]
 
             _results = []
 
@@ -979,19 +996,34 @@ class SiteMemberCollection(list):
                 _results.extend(await asyncio.gather(*_stmt[:site.client.asyncLoopLength]))
                 del _stmt[:site.client.asyncLoopLength]
                 await asyncio.sleep(site.client.asyncLoopWaitTime)
-                logger.info(f"GetSiteMembers: completed: {len(_results)}, pending: {len(_stmt)}\n"
+                logger.info(f"GetSiteMembers({_group}): completed: {len(_results)}, pending: {len(_stmt)}\n"
                             f"\ttime elapsed: {datetime.now() - _loopStartTime}, estimated remaining: {((datetime.now() - _loopStartTime) / len(_results)) * len(_stmt)}")
 
             return _results
+
+        if group is None:
+            group = ""
+        else:
+            group = group.lower()
+            if group not in ("", "members", "moderators", "admins"):
+                raise ValueError(f"Invalid group: {group}")
 
         if asyncLimit is None:
             asyncLimit = site.client.asyncLimit
 
         loop = asyncio.get_event_loop()
-        results = loop.run_until_complete(_main(site, asyncLimit))
+        results = loop.run_until_complete(_main(site, group, asyncLimit))
         objects = []
         for r in results:
             objects.extend(r)
+
+        if group in ("admins", "moderators"):
+            for object in objects:
+                match group:
+                    case "admins":
+                        object.isAdmin = True
+                    case "moderators":
+                        object.isModerator = True
         return SiteMemberCollection(client=site.client, objects=objects)
 
 
