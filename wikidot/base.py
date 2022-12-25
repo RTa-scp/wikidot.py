@@ -877,6 +877,66 @@ async def page_getsource_mass(*, limit: int = 10, url: str, targets: Union[list,
 
 
 async def page_gethistory(*, url: str, pageid: int):
+
+    """
+    metadataに最新のtitle, name, tags, parentを入れておく.
+    flagで，T, R, A, Mがあった場合は，metadataが更新される.
+    to_rev_idのmetaとmetadataが一致して，かつflagのlevel順に，T, R, A, Mの順でcompareされている．flagにいずれかがない場合は飛ばすことになる．
+    metadataをfrom_revのものに更新して置く．このmetadataは次のrevから適応することになる．
+    """
+
+
+    async def _get_source(*,url: str, rev_id: int):
+        try:
+            _r = await connector.connect(
+                url=url,
+                body={
+                    "moduleName": "history/PageSourceModule",
+                    "revision_id": rev_id
+                }
+            )
+        except exceptions.StatusIsNotOKError as e:
+            logger.error(f"Status is not OK, {e.args[1]}, {rev_id}")
+            return 1, []
+        
+        _r_body = bs4(_r["body"], "lxml")
+        source = _r_body.find("div", class_="page-source").get_text().replace(u"\xa0", u" ").strip()
+        return source
+
+    async def _get_diff(*, url: str, from_rev_id: int, to_rev_id: int):
+        try:
+            _r = await connector.connect(
+                url=url,
+                body={
+                    "moduleName": "history/PageDiffModule",
+                    "from_revision_id": from_rev_id,
+                    "to_revision_id": to_rev_id,
+                    "show_type": "inline"
+                }
+            )
+        except exceptions.StatusIsNotOKError as e:
+            logger.error(f"Status is not OK, {e.args[1]}, {from_rev_id}, {to_rev_id}")
+            return 1, []
+
+        _r_body = bs4(_r["body"], "lxml")
+
+        if _r_body.find("table", class_="page-compare") is None:
+            return None
+        else:
+            compare_table = _r_body.find("table", class_="page-compare")
+            compare_tr = compare_table.find_all("tr")
+            compare_tr_h = compare_tr[0].find_all("td")
+            compare_tr_b = compare_tr[2:]
+            diff_data = {}
+            for row in compare_tr_b:
+                row_td = row.find_all("td")
+                d = {
+                    compare_tr_h[1]: row_td[1].get_text(),
+                    compare_tr_h[2]: row_td[2].get_text()                    
+                }
+                diff_data[compare_tr_h[0].get_text()] = d
+            return diff_data
+
     async def _get(*, url: str, pageid: int, page: int):
         try:
             _r = await connector.connect(
@@ -938,6 +998,8 @@ async def page_gethistory(*, url: str, pageid: int):
                 comment = td[6].get_text()
                 if comment == "":
                     comment = None
+                
+                source = await _get_source(url=url, rev_id=rev_id)
 
                 r.append({
                     "rev_id": rev_id,
@@ -949,7 +1011,8 @@ async def page_gethistory(*, url: str, pageid: int):
                     },
                     "time": time,
                     "flags": flags,
-                    "comment": comment
+                    "comment": comment,
+                    "source": source
                 })
 
         return total, r
